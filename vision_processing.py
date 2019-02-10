@@ -5,8 +5,8 @@ import numpy as np
 import time
 import math
 
-os.system('v4l2-ctl -c exposure_auto=1 -c exposure_absolute=1 -d /dev/video1')
-cap = cv2.VideoCapture(1)
+#os.system('v4l2-ctl -c exposure_auto=1 -c exposure_absolute=1 -d /dev/video0')
+cap = cv2.VideoCapture(0)
 cap.set(cv2.CAP_PROP_FRAME_WIDTH,1280)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT,720)
 cap.set(cv2.CAP_PROP_FPS,60)
@@ -14,7 +14,7 @@ cap.set(cv2.CAP_PROP_FPS,60)
 framerate = 30
 fourcc = 0x00000021
 
-stream = cv2.VideoWriter('appsrc ! videoconvert ! video/x-raw,width=1280,height=720,framerate=30/1 ! omxh264enc bitrate=1000000 ! h264parse ! rtph264pay config-interval=1 pt=96 ! udpsink host=127.0.0.1 port=5004',fourcc,framerate,(1280,720))
+#stream = cv2.VideoWriter('appsrc ! videoconvert ! video/x-raw,width=1280,height=720,framerate=30/1 ! omxh264enc bitrate=1000000 ! h264parse ! rtph264pay config-interval=1 pt=96 ! udpsink host=127.0.0.1 port=5004',fourcc,framerate,(1280,720))
 
 def center(contour):
     moments = cv2.moments(contour)
@@ -32,14 +32,23 @@ millis = int(round(time.time() * 1000))
 frameCount = 0
 fps = 0
 
+def drawGuideLines(frame):
+    lineThickness = 8
+    cv2.line(frame, (0,720), (438, 100), (57, 255, 20), lineThickness)
+    cv2.line(frame, (1280,720), (842, 100), (57, 255, 20), lineThickness)
+    cv2.line(frame, (246,377), (346, 377), (57, 255, 20), lineThickness)
+    cv2.line(frame, (935,377), (1035, 377), (57, 255, 20), lineThickness)
+
 while cap.isOpened():
     ret, frame = cap.read()
+    centers=[]	
     if ret:
 	hsv = cv2.cvtColor(frame, cv2.COLOR_RGB2HSV)
         lower_green = np.array(constants.LOWER_GREEN, dtype=np.uint8)
         upper_green = np.array(constants.UPPER_GREEN, dtype=np.uint8)
+	drawGuideLines(frame)
 	mask = cv2.inRange(hsv, lower_green, upper_green)
-	im2, contours, hierarchy = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+	contours, hierarchy = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 	contours = [x for x in contours if cv2.contourArea(x) >= constants.MIN_CONTOUR_AREA and isRectangle(x)]
 	contours = sorted(contours, key=lambda x: center(x)[0])
 	#contours = [cv2.approxPolyDP(x, 0.1 * cv2.arcLength(x, True), True) for x in contours]
@@ -56,21 +65,23 @@ while cap.isOpened():
 	    contourSides.append((contour, side))
 
 	    cv2.putText(frame, side, center(contour), cv2.FONT_HERSHEY_DUPLEX, 0.5, (255, 0, 0), 1, cv2.LINE_AA)
-	frameCount += 1
+	    frameCount += 1
+ 
 	currTime = int(round(time.time() * 1000))
 	if (currTime - millis) >= 1000:
 	    fps = frameCount/float(currTime - millis) * 1000
 	    millis = currTime
 	    frameCount = 0
+
 	cv2.putText(frame, 'FPS: ' + str(fps), (5, 32), cv2.FONT_HERSHEY_DUPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
-	#cv2.imshow('frame', frame)
+	cv2.imshow('frame', frame)
 	if cv2.waitKey(1) == 27:
 	    break
-        stream.write(frame)
+        #stream.write(frame)
 	#print frame.shape
     else:
         break
 
 # Release everything if job is finished
 cap.release()
-stream.release()
+#stream.release()
