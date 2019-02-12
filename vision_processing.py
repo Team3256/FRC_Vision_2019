@@ -5,8 +5,8 @@ import numpy as np
 import time
 import math
 
-#os.system('v4l2-ctl -c exposure_auto=1 -c exposure_absolute=1 -d /dev/video0')
-cap = cv2.VideoCapture(0)
+os.system('v4l2-ctl -c exposure_auto=1 -c exposure_absolute=1 -d /dev/video2')
+cap = cv2.VideoCapture(2)
 cap.set(cv2.CAP_PROP_FRAME_WIDTH,1280)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT,720)
 cap.set(cv2.CAP_PROP_FPS,60)
@@ -39,6 +39,16 @@ def drawGuideLines(frame):
     cv2.line(frame, (246,377), (346, 377), (57, 255, 20), lineThickness)
     cv2.line(frame, (935,377), (1035, 377), (57, 255, 20), lineThickness)
 
+def getAvgX(firstX, secondX):
+    return (firstX + secondX)/2
+
+def getAngle(px):
+    nx = (1.0/640.0) * (px - 639.5)
+    vpw = 2* np.tan(constants.FIELD_OF_VIEW_X/2)
+    x = vpw/2 * nx
+    theta = np.arctan2(1,x) * (180/np.pi)
+    return -(theta - 90)
+
 while cap.isOpened():
     ret, frame = cap.read()
     centers=[]	
@@ -50,7 +60,12 @@ while cap.isOpened():
 	mask = cv2.inRange(hsv, lower_green, upper_green)
 	contours, hierarchy = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 	contours = [x for x in contours if cv2.contourArea(x) >= constants.MIN_CONTOUR_AREA and isRectangle(x)]
-	contours = sorted(contours, key=lambda x: center(x)[0])
+	contours = sorted(contours, key=lambda x: cv2.contourArea(x))
+	if len(contours) >= 2:
+	    #cv2.putText(frame, 'Contour: ' + str(center(contours[0])), (5, 80), cv2.FONT_HERSHEY_DUPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
+	    avgx = getAvgX(center(contours[0])[0], center(contours[1])[0])
+	    angle = getAngle(avgx)
+	    cv2.putText(frame, 'Angle: ' + str(angle), (50, 200), cv2.FONT_HERSHEY_DUPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
 	#contours = [cv2.approxPolyDP(x, 0.1 * cv2.arcLength(x, True), True) for x in contours]
 	cv2.drawContours(frame, contours, -1, (0, 0, 255), 2)
 	contourSides = []
