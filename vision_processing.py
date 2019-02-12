@@ -5,8 +5,8 @@ import numpy as np
 import time
 import math
 
-os.system('v4l2-ctl -c exposure_auto=1 -c exposure_absolute=1 -d /dev/video2')
-cap = cv2.VideoCapture(2)
+os.system('v4l2-ctl -c exposure_auto=1 -c exposure_absolute=1 -d /dev/video0')
+cap = cv2.VideoCapture(0)
 cap.set(cv2.CAP_PROP_FRAME_WIDTH,1280)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT,720)
 cap.set(cv2.CAP_PROP_FPS,60)
@@ -48,6 +48,22 @@ def getAngle(px):
     x = vpw/2 * nx
     theta = np.arctan2(1,x) * (180/np.pi)
     return -(theta - 90)
+
+def getVerticalAngle(py):
+    ny = (1.0/360.0) * (359.5 - py)
+    vph = 2 * np.tan(constants.FIELD_OF_VIEW_Y/2)
+    y = vpw/2 * ny
+    theta = np.arctan2(1,y) * (180/np.pi)
+    return -(theta - 90)
+
+def getDistanceFromTarget(thetaY):
+    angleSum = thetaY + constants.CAMERA_ANGLE_DELTA
+    d = (constants.CAMERA_HEIGHT_DELTA)/(np.tan(angleSum))
+    return d
+
+def getHorizontalDisplacement(distanceFromTarget, thetaX):
+    deltaX = np.tan(thetaX) * distanceFromTarget
+    return deltaX
 
 while cap.isOpened():
     ret, frame = cap.read()
