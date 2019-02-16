@@ -14,7 +14,7 @@ cap.set(cv2.CAP_PROP_FRAME_HEIGHT,720)
 framerate = 30
 fourcc = 0x00000021
 
-#stream = cv2.VideoWriter('appsrc ! videoconvert ! video/x-raw,width=1280,height=720,framerate=30/1 ! omxh264enc bitrate=1000000 ! h264parse ! rtph264pay config-interval=1 pt=96 ! udpsink host=127.0.0.1 port=5004',fourcc,framerate,(1280,720))
+stream = cv2.VideoWriter('appsrc ! videoconvert ! video/x-raw,width=1280,height=720,framerate=30/1 ! omxh264enc bitrate=1000000 ! h264parse ! rtph264pay config-interval=1 pt=96 ! udpsink host=127.0.0.1 port=5005',fourcc,framerate,(1280,720))
 
 def center(contour):
     moments = cv2.moments(contour)
@@ -115,8 +115,8 @@ while cap.isOpened():
     cv2.imshow('frame', frame)
     if cv2.waitKey(1) == 27:
         break
-    #stream.write(frame)
+    stream.write(frame)
 
 # Release everything if job is finished
 cap.release()
-#stream.release()
+stream.release()
