@@ -9,7 +9,7 @@ os.system('v4l2-ctl -c exposure_auto=1 -c exposure_absolute=1 -d /dev/video0')
 cap = cv2.VideoCapture(0)
 cap.set(cv2.CAP_PROP_FRAME_WIDTH,1280)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT,720)
-cap.set(cv2.CAP_PROP_FPS,60)
+#cap.set(cv2.CAP_PROP_FPS,30)
 
 framerate = 30
 fourcc = 0x00000021
@@ -39,7 +39,7 @@ def drawGuideLines(frame):
     cv2.line(frame, (246,377), (346, 377), (57, 255, 20), lineThickness)
     cv2.line(frame, (935,377), (1035, 377), (57, 255, 20), lineThickness)
 
-def getAvgX(firstX, secondX):
+def getAvg(firstX, secondX):
     return (firstX + secondX)/2
 
 def getAngle(px):
@@ -51,14 +51,14 @@ def getAngle(px):
 
 def getVerticalAngle(py):
     ny = (1.0/360.0) * (359.5 - py)
-    vph = 2 * np.tan(constants.FIELD_OF_VIEW_Y/2)
-    y = vph/2 * ny
-    theta = np.arctan2(1,y) * (180/np.pi)
-    return (theta - 90)
+    vph = 2.0 * np.tan(constants.FIELD_OF_VIEW_Y*np.pi/180.0/2.0)
+    y = vph/2.0 * ny
+    theta = np.arctan2(1,y) * (180.0/np.pi)
+    return -(theta - 90)
 
 def getDistanceFromTarget(thetaY):
     angleSum = thetaY + constants.CAMERA_ANGLE_DELTA
-    d = (constants.CAMERA_HEIGHT_DELTA)/(np.tan(angleSum))
+    d = (constants.CAMERA_HEIGHT_DELTA)/(np.tan(angleSum*np.pi/180.0))
     return d
 
 def getHorizontalDisplacement(distanceFromTarget, thetaX):
@@ -69,22 +69,25 @@ while cap.isOpened():
     ret, frame = cap.read()
     centers=[]
     if not ret:
-        continue	
+        continue
     hsv = cv2.cvtColor(frame, cv2.COLOR_RGB2HSV)
     lower_green = np.array(constants.LOWER_GREEN, dtype=np.uint8)
     upper_green = np.array(constants.UPPER_GREEN, dtype=np.uint8)
     mask = cv2.inRange(hsv, lower_green, upper_green)
-    contours, hierarchy = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    _, contours, hierarchy = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     contours = [x for x in contours if cv2.contourArea(x) >= constants.MIN_CONTOUR_AREA and isRectangle(x)]
-    contours = sorted(contours, key=lambda x: cv2.contourArea(x))
+    contours = sorted(contours, key=lambda x: -cv2.contourArea(x))
     if len(contours) >= 2:
-        #cv2.putText(frame, 'Contour: ' + str(center(contours[0])), (5, 80), cv2.FONT_HERSHEY_DUPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
-        avgx = getAvgX(center(contours[0])[0], center(contours[1])[0])
-        avgy = getAvgX(center(contours[0])[1], center(contours[1])[1])
+        contours = contours[0:2]
+        avgx = getAvg(center(contours[0])[0], center(contours[1])[0])
+        avgy = getAvg(center(contours[0])[1], center(contours[1])[1])
         angle = getAngle(avgx)
         angleY = getVerticalAngle(avgy)
-        cv2.putText(frame, 'Angle: ' + str(angle), (50, 200), cv2.FONT_HERSHEY_DUPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
-        cv2.putText(frame, 'Vertical Angle: ' + str(angleY), (50, 500), cv2.FONT_HERSHEY_DUPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
+        distance = getDistanceFromTarget(angleY)
+        cv2.putText(frame, 'Angle: ' + str(angle), (5, 67), cv2.FONT_HERSHEY_DUPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
+        cv2.putText(frame, 'Vertical Angle: ' + str(angleY), (5, 102), cv2.FONT_HERSHEY_DUPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
+        cv2.putText(frame, 'Distance: ' + str(distance), (5, 137), cv2.FONT_HERSHEY_DUPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
+        
     #contours = [cv2.approxPolyDP(x, 0.1 * cv2.arcLength(x, True), True) for x in contours]
     cv2.drawContours(frame, contours, -1, (0, 0, 255), 2)
     contourSides = []
@@ -104,7 +107,6 @@ while cap.isOpened():
     currTime = int(round(time.time() * 1000))
     if (currTime - millis) >= 1000:
         fps = frameCount/float(currTime - millis) * 1000
-        print(fps)
         millis = currTime
         frameCount = 0
     
