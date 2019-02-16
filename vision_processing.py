@@ -5,7 +5,9 @@ import numpy as np
 import time
 import math
 
-os.system('v4l2-ctl -c exposure_auto=1 -c exposure_absolute=1 -d /dev/video0')
+from networktables import NetworkTables
+
+
 cap = cv2.VideoCapture(0)
 cap.set(cv2.CAP_PROP_FRAME_WIDTH,1280)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT,720)
@@ -16,6 +18,22 @@ fourcc = 0x00000021
 
 stream = cv2.VideoWriter('appsrc ! videoconvert ! video/x-raw,width=1280,height=720,framerate=30/1 ! omxh264enc bitrate=1000000 ! h264parse ! rtph264pay config-interval=1 pt=96 ! udpsink host=127.0.0.1 port=5005',fourcc,framerate,(1280,720))
 
+# NetworkTables
+
+NetworkTables.initialize(server=constants.SERVER_IP)
+sd = NetworkTables.getTable("SmartDashboard")
+
+visionEnabled = True
+
+def onKeyChanged(table, key, value, isNew):
+    global visionEnabled
+    if key == "visionEnabled":
+        visionEnabled = value
+        exposure = constants.VISION_EXPOSURE if value else constants.REGULAR_EXPOSURE
+        os.system("v4l2-ctl -c exposure_auto=1 -c exposure_absolute={} -d /dev/video0".format(exposure))
+    
+sd.addEntryListener(onKeyChanged)
+
 def center(contour):
     moments = cv2.moments(contour)
     return (int(moments["m10"]/moments["m00"]), int(moments["m01"]/moments["m00"])) if moments[
@@ -25,7 +43,7 @@ def isRectangle(contour):
     rectanglePoints = cv2.minAreaRect(contour)
     rectangle = np.int0(cv2.boxPoints(rectanglePoints))
     rectangularity = cv2.contourArea(rectangle)/cv2.contourArea(contour)
-    print (str(center(contour)) + " rectangularity: " + str(rectangularity) + " angle " + str(rectanglePoints[2]))
+    #print (str(center(contour)) + " rectangularity: " + str(rectangularity) + " angle " + str(rectanglePoints[2]))
     return 0.9 < rectangularity < 1.25
 
 millis = int(round(time.time() * 1000))
@@ -70,6 +88,13 @@ while cap.isOpened():
     centers=[]
     if not ret:
         continue
+    if not visionEnabled:
+        drawGuideLines(frame)
+        cv2.imshow('frame', frame)
+        if cv2.waitKey(1) == 27:
+            break
+        stream.write(frame)
+        continue
     hsv = cv2.cvtColor(frame, cv2.COLOR_RGB2HSV)
     lower_green = np.array(constants.LOWER_GREEN, dtype=np.uint8)
     upper_green = np.array(constants.UPPER_GREEN, dtype=np.uint8)
@@ -84,6 +109,9 @@ while cap.isOpened():
         angle = getAngle(avgx)
         angleY = getVerticalAngle(avgy)
         distance = getDistanceFromTarget(angleY)
+        sd.putNumber("visionAngle", angle)
+        sd.putNumber("visionVerticalAngle", angleY)
+        sd.putNumber("visionDistance", distance)
         cv2.putText(frame, 'Angle: ' + str(angle), (5, 67), cv2.FONT_HERSHEY_DUPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
         cv2.putText(frame, 'Vertical Angle: ' + str(angleY), (5, 102), cv2.FONT_HERSHEY_DUPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
         cv2.putText(frame, 'Distance: ' + str(distance), (5, 137), cv2.FONT_HERSHEY_DUPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
@@ -109,6 +137,7 @@ while cap.isOpened():
         fps = frameCount/float(currTime - millis) * 1000
         millis = currTime
         frameCount = 0
+        sd.putNumber("visionFPS", fps)
     
     cv2.putText(frame, 'FPS: ' + str(fps), (5, 32), cv2.FONT_HERSHEY_DUPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
     drawGuideLines(frame)
