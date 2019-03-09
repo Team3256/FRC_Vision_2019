@@ -1,4 +1,5 @@
 import os
+import sys
 import cv2
 import constants
 import numpy as np
@@ -7,8 +8,10 @@ import math
 
 from networktables import NetworkTables
 
+cameraId = sys.argv[1]
+janusPort = sys.argv[2]
 
-cap = cv2.VideoCapture(0)
+cap = cv2.VideoCapture(int(cameraId))
 cap.set(cv2.CAP_PROP_FRAME_WIDTH,1280)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT,720)
 #cap.set(cv2.CAP_PROP_FPS,30)
@@ -16,21 +19,21 @@ cap.set(cv2.CAP_PROP_FRAME_HEIGHT,720)
 framerate = 30
 fourcc = 0x00000021
 
-stream = cv2.VideoWriter('appsrc ! videoconvert ! video/x-raw,width=1280,height=720,framerate=30/1 ! omxh264enc bitrate=1000000 ! h264parse ! rtph264pay config-interval=1 pt=96 ! udpsink host=127.0.0.1 port=5005',fourcc,framerate,(1280,720))
+stream = cv2.VideoWriter('appsrc ! videoconvert ! video/x-raw,width=1280,height=720,framerate=30/1 ! omxh264enc bitrate=10000 ! h264parse ! rtph264pay config-interval=1 pt=96 ! udpsink host=10.32.56.184 port=5808',fourcc,framerate,(1280,720))
 
 # NetworkTables
 
 NetworkTables.initialize(server=constants.SERVER_IP)
 sd = NetworkTables.getTable("SmartDashboard")
 
-visionEnabled = True
+visionEnabled = False
 
 def onKeyChanged(table, key, value, isNew):
     global visionEnabled
     if key == "visionEnabled":
         visionEnabled = value
         exposure = constants.VISION_EXPOSURE if value else constants.REGULAR_EXPOSURE
-        os.system("v4l2-ctl -c exposure_auto=1 -c exposure_absolute={} -d /dev/video0".format(exposure))
+        os.system(("v4l2-ctl -c exposure_auto=1 -c exposure_absolute={} -d /dev/video" + cameraId).format(exposure))
     
 sd.addEntryListener(onKeyChanged)
 
@@ -54,8 +57,11 @@ def drawGuideLines(frame):
     lineThickness = 8
     cv2.line(frame, (0,720), (438, 100), (57, 255, 20), lineThickness)
     cv2.line(frame, (1280,720), (842, 100), (57, 255, 20), lineThickness)
-    cv2.line(frame, (246,377), (346, 377), (57, 255, 20), lineThickness)
-    cv2.line(frame, (935,377), (1035, 377), (57, 255, 20), lineThickness)
+    cv2.line(frame, (246,377), (346, 377), (0,0,255), lineThickness)
+    cv2.line(frame, (935,377), (1035, 377), (0,0,255), lineThickness)
+    cv2.line(frame, (370,200), (410, 200), (0,255,255), lineThickness)
+    cv2.line(frame, (870,200), (910,200), (0,255,255), lineThickness)
+    cv2.line(frame, (640,720), (640, 0), (251,194,115), lineThickness)
 
 def getAvg(firstX, secondX):
     return (firstX + secondX)/2
@@ -88,11 +94,20 @@ while cap.isOpened():
     centers=[]
     if not ret:
         continue
+    frameCount += 1
+    currTime = int(round(time.time() * 1000))
+    if (currTime - millis) >= 1000:
+        fps = frameCount/float(currTime - millis) * 1000
+        millis = currTime
+        frameCount = 0
+        sd.putNumber("visionFPS" + cameraId, fps)
+    cv2.putText(frame, 'FPS: ' + str(fps), (5, 32), cv2.FONT_HERSHEY_DUPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
     if not visionEnabled:
         drawGuideLines(frame)
-        cv2.imshow('frame', frame)
-        if cv2.waitKey(1) == 27:
-            break
+        if constants.DEV:
+            cv2.imshow('frame', frame)
+            if cv2.waitKey(1) == 27:
+                break
         stream.write(frame)
         continue
     hsv = cv2.cvtColor(frame, cv2.COLOR_RGB2HSV)
@@ -109,9 +124,9 @@ while cap.isOpened():
         angle = getAngle(avgx)
         angleY = getVerticalAngle(avgy)
         distance = getDistanceFromTarget(angleY)
-        sd.putNumber("visionAngle", angle)
-        sd.putNumber("visionVerticalAngle", angleY)
-        sd.putNumber("visionDistance", distance)
+        sd.putNumber("visionAngle" + cameraId, angle)
+        sd.putNumber("visionVerticalAngle" + cameraId, angleY)
+        sd.putNumber("visionDistance" + cameraId, distance)
         cv2.putText(frame, 'Angle: ' + str(angle), (5, 67), cv2.FONT_HERSHEY_DUPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
         cv2.putText(frame, 'Vertical Angle: ' + str(angleY), (5, 102), cv2.FONT_HERSHEY_DUPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
         cv2.putText(frame, 'Distance: ' + str(distance), (5, 137), cv2.FONT_HERSHEY_DUPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
@@ -130,20 +145,12 @@ while cap.isOpened():
         contourSides.append((contour, side))
 
         cv2.putText(frame, side, center(contour), cv2.FONT_HERSHEY_DUPLEX, 0.5, (255, 0, 0), 1, cv2.LINE_AA)
-    frameCount += 1
- 
-    currTime = int(round(time.time() * 1000))
-    if (currTime - millis) >= 1000:
-        fps = frameCount/float(currTime - millis) * 1000
-        millis = currTime
-        frameCount = 0
-        sd.putNumber("visionFPS", fps)
     
-    cv2.putText(frame, 'FPS: ' + str(fps), (5, 32), cv2.FONT_HERSHEY_DUPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
     drawGuideLines(frame)
-    cv2.imshow('frame', frame)
-    if cv2.waitKey(1) == 27:
-        break
+    if constants.DEV:
+        cv2.imshow('frame', frame)
+        if cv2.waitKey(1) == 27:
+            break
     stream.write(frame)
 
 # Release everything if job is finished

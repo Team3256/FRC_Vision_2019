@@ -9,10 +9,12 @@ FOCAL_LENGTH = 3.67 #mm
 FIELD_OF_VIEW_X = 70.42 #degrees
 FIELD_OF_VIEW_Y = 43.3 #degrees
 
-CAMERA_HEIGHT_DELTA = 6.2 #inches
-CAMERA_ANGLE_DELTA =  10 #degrees
+CAMERA_HEIGHT_DELTA = 6.2 #inches below desired object
+CAMERA_ANGLE_DELTA =  10 #degrees angled up
 
 VISION_EXPOSURE = 6
 REGULAR_EXPOSURE = 200
 
-SERVER_IP = "localhost" #for networktables
+SERVER_IP = "10.32.56.2" #for networktables
+
+DEV = False
